@@ -8,6 +8,7 @@ from flask import Flask
 
 app = Flask(__name__)
 
+# --- 엑셀 매뉴얼 ---
 QNA_DATA = {
     "무음": "안녕하세요 고객님! 무음 제품을 희망하시는 경우, 구매 전 톡톡 문의 또는 배송 메모에 '무음 제품 희망'이라고 남겨주시면 확인 후 무음 제품으로 발송해 드리겠습니다!",
     "소리": "안녕하세요 고객님! 무음 제품을 희망하시는 경우, 구매 전 톡톡 문의 또는 배송 메모에 '무음 제품 희망'이라고 남겨주시면 확인 후 무음 제품으로 발송해 드리겠습니다!",
@@ -23,7 +24,6 @@ QNA_DATA = {
 
 NAVER_CLIENT_ID = os.environ.get("NAVER_CLIENT_ID", "").strip()
 NAVER_SECRET = os.environ.get("NAVER_SECRET", "").strip()
-NAVER_ACCOUNT_ID = os.environ.get("NAVER_ACCOUNT_ID", "").strip()
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 
@@ -42,17 +42,17 @@ def get_naver_token():
     signature = base64.b64encode(hashed).decode('utf-8')
     
     url = "https://api.commerce.naver.com/external/v1/oauth2/token"
+    
+    # 💡 문제가 되었던 type과 account_id를 모두 삭제하여
+    # 예전에 PC에서 쓰시던 '가장 기본 통신 방식'으로 롤백했습니다!
     data = {
         "client_id": NAVER_CLIENT_ID,
         "timestamp": timestamp,
         "client_secret_sign": signature,
-        "grant_type": "client_credentials",
-        "type": "SELLER",
-        "account_id": NAVER_ACCOUNT_ID
+        "grant_type": "client_credentials"
     }
     res = requests.post(url, data=data, timeout=10)
     
-    # 💡 에러 발생 시 네이버의 진짜 거절 사유를 까만 창에 출력합니다!
     if res.status_code != 200:
         print(f"🚨 네이버 로그인 거절 상세 이유: {res.text}", flush=True)
         
@@ -117,7 +117,7 @@ def run_bot():
                         print("등록된 매뉴얼에 해당되는 키워드가 없어 대기합니다.", flush=True)
             
         except Exception as e:
-            pass # 불필요한 중복 에러 로그는 가림 처리
+            pass 
             
         time.sleep(60)
 
