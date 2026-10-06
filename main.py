@@ -10,29 +10,21 @@ app = Flask(__name__)
 
 # --- 엑셀을 완벽하게 대체하는 핵심 QnA 매뉴얼 ---
 QNA_DATA = {
-    # 1. 무음 카메라 관련
     "무음": "안녕하세요 고객님! 무음 제품을 희망하시는 경우, 구매 전 톡톡 문의 또는 배송 메모에 '무음 제품 희망'이라고 남겨주시면 확인 후 무음 제품으로 발송해 드리겠습니다!",
     "소리": "안녕하세요 고객님! 무음 제품을 희망하시는 경우, 구매 전 톡톡 문의 또는 배송 메모에 '무음 제품 희망'이라고 남겨주시면 확인 후 무음 제품으로 발송해 드리겠습니다!",
-    
-    # 2. 유심 / 개통 관련
     "유심": "안녕하세요 고객님! 쓰시던 유심이나 새로 구매하신 유심(알뜰폰 포함 3사 모두 가능)을 꽂으시면 메인폰, 세컨폰 상관없이 통화/문자 모두 즉시 정상 사용 가능한 자급제 단말기입니다!",
     "자급제": "안녕하세요 고객님! 쓰시던 유심이나 새로 구매하신 유심(알뜰폰 포함 3사 모두 가능)을 꽂으시면 메인폰, 세컨폰 상관없이 통화/문자 모두 즉시 정상 사용 가능한 자급제 단말기입니다!",
-    
-    # 3. 애플 계정 / 에어드롭 기능 관련
     "애플아이디": "안녕하세요 고객님! 애플 아이디 생성 및 에어드롭 등 아이폰의 모든 고유 기능은 정상적으로 100% 사용 가능합니다!",
     "에어드롭": "안녕하세요 고객님! 애플 아이디 생성 및 에어드롭 등 아이폰의 모든 고유 기능은 정상적으로 100% 사용 가능합니다!",
-    
-    # 4. 기기 추천 / 스펙 관련
     "16": "안녕하세요 고객님! 전화와 문자 등 기본 용도로만 사용하신다면 16GB 모델로도 충분히 쾌적하게 사용 가능하십니다. 다만 사진을 많이 찍으신다면 32GB를 추천해 드립니다!",
     "32": "안녕하세요 고객님! 전화와 문자 등 기본 용도로만 사용하신다면 16GB 모델로도 충분히 쾌적하게 사용 가능하십니다. 다만 사진을 많이 찍으신다면 32GB를 추천해 드립니다!",
-    
-    # 5. 배송 기간 / 일정 관련
     "배송": "안녕하세요 고객님! 국내배송으로 배송기간은 평일 5시 이전 주문건은 도서산간 지역을 제외하고 대부분 다음날 받아보실 수 있습니다!",
     "도착": "안녕하세요 고객님! 국내배송으로 배송기간은 평일 5시 이전 주문건은 도서산간 지역을 제외하고 대부분 다음날 받아보실 수 있습니다!"
 }
 
 NAVER_CLIENT_ID = os.environ.get("NAVER_CLIENT_ID", "").strip()
 NAVER_SECRET = os.environ.get("NAVER_SECRET", "").strip()
+NAVER_ACCOUNT_ID = os.environ.get("NAVER_ACCOUNT_ID", "").strip()
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 
@@ -57,14 +49,14 @@ def get_naver_token():
         "timestamp": timestamp,
         "client_secret_sign": signature,
         "grant_type": "client_credentials",
-        "type": "SELLER"
+        "type": "SELLER",
+        "account_id": NAVER_ACCOUNT_ID
     }
     res = requests.post(url, data=data, timeout=10)
     res.raise_for_status()
     return res.json().get("access_token")
 
 def find_answer(question):
-    """질문에서 키워드를 찾아 엑셀 매뉴얼의 답변을 반환"""
     question_no_space = question.replace(" ", "")
     for keyword, answer in QNA_DATA.items():
         if keyword in question_no_space:
@@ -81,7 +73,6 @@ def run_bot():
             token = get_naver_token()
             headers = {"Authorization": f"Bearer {token}"}
             
-            # 미답변 문의 20개 조회
             url = "https://api.commerce.naver.com/external/v1/contents/qnas?page=1&size=20"
             res = requests.get(url, headers=headers, timeout=10)
             res.raise_for_status()
@@ -107,7 +98,7 @@ def run_bot():
                     answer = find_answer(question_text)
                     
                     if answer:
-                        print(f"✅ 매뉴얼 매칭 완료! 답변 등록을 시도합니다...", flush=True)
+                        print(f"✅ 매뉴얼 매칭 완료! 답변 등록 시도 중...", flush=True)
                         put_url = f"https://api.commerce.naver.com/external/v1/contents/qnas/{question_id}"
                         put_data = {"answerContent": answer}
                         headers['Content-Type'] = 'application/json'
@@ -125,9 +116,8 @@ def run_bot():
         except Exception as e:
             print(f"API 통신 오류 발생: {e}", flush=True)
             
-        time.sleep(60) # 1분마다 무한 반복
+        time.sleep(60)
 
-# 클라우드 서버가 봇 시작 버튼을 무조건 누르도록 밖으로 꺼냈습니다!
 bot_thread = threading.Thread(target=run_bot, daemon=True)
 bot_thread.start()
 
