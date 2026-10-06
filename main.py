@@ -2,54 +2,138 @@ import os
 import time
 import threading
 import requests
+import bcrypt
+import base64
 from flask import Flask
 
 app = Flask(__name__)
 
-# --- 엑셀을 대체하는 내장 QnA 매뉴얼 ---
+# --- 엑셀을 완벽하게 대체하는 핵심 QnA 매뉴얼 ---
 QNA_DATA = {
-    "배송": "안녕하세요! 평일 5시 이전 주문건은 대부분 다음날 도착합니다.",
-    "취소": "취소 처리는 즉시 승인되며, 영업일 기준 1~3일 내에 환불됩니다."
+    # 1. 무음 카메라 관련
+    "무음": "안녕하세요 고객님! 무음 제품을 희망하시는 경우, 구매 전 톡톡 문의 또는 배송 메모에 '무음 제품 희망'이라고 남겨주시면 확인 후 무음 제품으로 발송해 드리겠습니다!",
+    "소리": "안녕하세요 고객님! 무음 제품을 희망하시는 경우, 구매 전 톡톡 문의 또는 배송 메모에 '무음 제품 희망'이라고 남겨주시면 확인 후 무음 제품으로 발송해 드리겠습니다!",
+    
+    # 2. 유심 / 개통 관련
+    "유심": "안녕하세요 고객님! 쓰시던 유심이나 새로 구매하신 유심(알뜰폰 포함 3사 모두 가능)을 꽂으시면 메인폰, 세컨폰 상관없이 통화/문자 모두 즉시 정상 사용 가능한 자급제 단말기입니다!",
+    "자급제": "안녕하세요 고객님! 쓰시던 유심이나 새로 구매하신 유심(알뜰폰 포함 3사 모두 가능)을 꽂으시면 메인폰, 세컨폰 상관없이 통화/문자 모두 즉시 정상 사용 가능한 자급제 단말기입니다!",
+    
+    # 3. 애플 계정 / 에어드롭 기능 관련
+    "애플아이디": "안녕하세요 고객님! 애플 아이디 생성 및 에어드롭 등 아이폰의 모든 고유 기능은 정상적으로 100% 사용 가능합니다!",
+    "에어드롭": "안녕하세요 고객님! 애플 아이디 생성 및 에어드롭 등 아이폰의 모든 고유 기능은 정상적으로 100% 사용 가능합니다!",
+    
+    # 4. 기기 추천 / 스펙 관련
+    "16": "안녕하세요 고객님! 전화와 문자 등 기본 용도로만 사용하신다면 16GB 모델로도 충분히 쾌적하게 사용 가능하십니다. 다만 사진을 많이 찍으신다면 32GB를 추천해 드립니다!",
+    "32": "안녕하세요 고객님! 전화와 문자 등 기본 용도로만 사용하신다면 16GB 모델로도 충분히 쾌적하게 사용 가능하십니다. 다만 사진을 많이 찍으신다면 32GB를 추천해 드립니다!",
+    
+    # 5. 배송 기간 / 일정 관련
+    "배송": "안녕하세요 고객님! 국내배송으로 배송기간은 평일 5시 이전 주문건은 도서산간 지역을 제외하고 대부분 다음날 받아보실 수 있습니다!",
+    "도착": "안녕하세요 고객님! 국내배송으로 배송기간은 평일 5시 이전 주문건은 도서산간 지역을 제외하고 대부분 다음날 받아보실 수 있습니다!"
 }
 
-# --- 클라우드에 숨겨둘 환경 변수(API 키) 불러오기 ---
-NAVER_CLIENT_ID = os.environ.get("NAVER_CLIENT_ID")
-NAVER_SECRET = os.environ.get("NAVER_SECRET")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+NAVER_CLIENT_ID = os.environ.get("NAVER_CLIENT_ID", "").strip()
+NAVER_SECRET = os.environ.get("NAVER_SECRET", "").strip()
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 
 def send_telegram(message):
-    """텔레그램으로 핸드폰 알림을 쏘는 함수"""
-    if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": message})
+    try:
+        if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+            requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": message}, timeout=5)
+    except Exception as e:
+        print(f"텔레그램 발송 실패: {e}", flush=True)
+
+def get_naver_token():
+    """네이버 커머스 API 2.0 보안 인증 토큰 발급"""
+    timestamp = int(time.time() * 1000)
+    password = NAVER_CLIENT_ID + "_" + str(timestamp)
+    hashed = bcrypt.hashpw(password.encode('utf-8'), NAVER_SECRET.encode('utf-8'))
+    signature = base64.b64encode(hashed).decode('utf-8')
+    
+    url = "https://api.commerce.naver.com/external/v1/oauth2/token"
+    data = {
+        "client_id": NAVER_CLIENT_ID,
+        "timestamp": timestamp,
+        "client_secret_sign": signature,
+        "grant_type": "client_credentials",
+        "type": "SELLER"
+    }
+    res = requests.post(url, data=data, timeout=10)
+    res.raise_for_status()
+    return res.json().get("access_token")
+
+def find_answer(question):
+    """질문에서 키워드를 찾아 엑셀 매뉴얼의 답변을 반환"""
+    question_no_space = question.replace(" ", "")
+    for keyword, answer in QNA_DATA.items():
+        if keyword in question_no_space:
+            return answer
+    return None
 
 def run_bot():
-    """24시간 무한 반복되는 봇의 핵심 업무 로직"""
-    time.sleep(5) # 서버 켜지고 잠시 대기
-    send_telegram("🚀 24시간 무인 봇 서버가 클라우드에서 가동을 시작했습니다!")
+    time.sleep(5)
+    send_telegram("🚀 스마트스토어 24시간 CS 봇이 완전히 깨어났습니다! 밀린 문의 순찰을 시작합니다.")
     
     while True:
         try:
-            # 이곳에 네이버 API 문의 조회 및 답변 로직이 자동으로 반복됩니다.
-            # (기존에 작성하신 네이버/구글 API 핵심 로직 구동)
-            print("네이버 스마트스토어 순찰 중...")
+            print("네이버 스마트스토어 순찰 중...", flush=True)
+            token = get_naver_token()
+            headers = {"Authorization": f"Bearer {token}"}
+            
+            # 미답변 문의 20개 조회
+            url = "https://api.commerce.naver.com/external/v1/contents/qnas?page=1&size=20"
+            res = requests.get(url, headers=headers, timeout=10)
+            res.raise_for_status()
+            qnas = res.json()
+            
+            contents = qnas.get('content', []) if 'content' in qnas else (qnas.get('elements', []) if 'elements' in qnas else qnas)
+            
+            if isinstance(contents, list):
+                for qna in contents:
+                    is_answered = qna.get('answered', False) or qna.get('answerStatus') == 'ANSWERED'
+                    if is_answered:
+                        continue
+                        
+                    question_id = qna.get('questionId', qna.get('id'))
+                    question_title = str(qna.get('subject', qna.get('title', ''))) 
+                    question_body = str(qna.get('content', ''))
+                    question_text = question_title + " " + question_body
+                    
+                    if not question_id:
+                        continue
+                        
+                    print(f"미답변 문의 발견: {question_text}", flush=True)
+                    answer = find_answer(question_text)
+                    
+                    if answer:
+                        print(f"✅ 매뉴얼 매칭 완료! 답변 등록을 시도합니다...", flush=True)
+                        put_url = f"https://api.commerce.naver.com/external/v1/contents/qnas/{question_id}"
+                        put_data = {"answerContent": answer}
+                        headers['Content-Type'] = 'application/json'
+                        
+                        put_res = requests.put(put_url, headers=headers, json=put_data, timeout=10)
+                        
+                        if put_res.status_code == 200:
+                            send_telegram(f"✅ 스마트스토어 자동 답변 완료!\n\n[문의] {question_text[:20]}...\n[답변] {answer[:30]}...")
+                            print(f"답변 등록 완료: {question_id}", flush=True)
+                        else:
+                            print(f"답변 등록 실패: {put_res.text}", flush=True)
+                    else:
+                        print("등록된 매뉴얼에 해당되는 키워드가 없어 대기합니다.", flush=True)
             
         except Exception as e:
-            print(f"오류 발생: {e}")
-            send_telegram(f"⚠️️ 봇 에러 발생: {e}")
-        
-        time.sleep(60) # 1분마다 순찰
+            print(f"API 통신 오류 발생: {e}", flush=True)
+            
+        time.sleep(60) # 1분마다 무한 반복
 
-# --- UptimeRobot이 5분마다 찔러줄 생명줄(Health Check) 주소 ---
+# 클라우드 서버가 봇 시작 버튼을 무조건 누르도록 밖으로 꺼냈습니다!
+bot_thread = threading.Thread(target=run_bot, daemon=True)
+bot_thread.start()
+
 @app.route('/health')
 def health():
     return "봇이 24시간 정상적으로 깨어 있습니다!", 200
-
-# 클라우드가 무조건 실행하도록 if문 밖으로 꺼냅니다!
-bot_thread = threading.Thread(target=run_bot, daemon=True)
-bot_thread.start()
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
