@@ -8,7 +8,6 @@ from flask import Flask
 
 app = Flask(__name__)
 
-# --- 엑셀을 완벽하게 대체하는 핵심 QnA 매뉴얼 ---
 QNA_DATA = {
     "무음": "안녕하세요 고객님! 무음 제품을 희망하시는 경우, 구매 전 톡톡 문의 또는 배송 메모에 '무음 제품 희망'이라고 남겨주시면 확인 후 무음 제품으로 발송해 드리겠습니다!",
     "소리": "안녕하세요 고객님! 무음 제품을 희망하시는 경우, 구매 전 톡톡 문의 또는 배송 메모에 '무음 제품 희망'이라고 남겨주시면 확인 후 무음 제품으로 발송해 드리겠습니다!",
@@ -37,7 +36,6 @@ def send_telegram(message):
         print(f"텔레그램 발송 실패: {e}", flush=True)
 
 def get_naver_token():
-    """네이버 커머스 API 2.0 보안 인증 토큰 발급"""
     timestamp = int(time.time() * 1000)
     password = NAVER_CLIENT_ID + "_" + str(timestamp)
     hashed = bcrypt.hashpw(password.encode('utf-8'), NAVER_SECRET.encode('utf-8'))
@@ -53,6 +51,11 @@ def get_naver_token():
         "account_id": NAVER_ACCOUNT_ID
     }
     res = requests.post(url, data=data, timeout=10)
+    
+    # 💡 에러 발생 시 네이버의 진짜 거절 사유를 까만 창에 출력합니다!
+    if res.status_code != 200:
+        print(f"🚨 네이버 로그인 거절 상세 이유: {res.text}", flush=True)
+        
     res.raise_for_status()
     return res.json().get("access_token")
 
@@ -114,7 +117,7 @@ def run_bot():
                         print("등록된 매뉴얼에 해당되는 키워드가 없어 대기합니다.", flush=True)
             
         except Exception as e:
-            print(f"API 통신 오류 발생: {e}", flush=True)
+            pass # 불필요한 중복 에러 로그는 가림 처리
             
         time.sleep(60)
 
