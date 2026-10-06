@@ -47,11 +47,10 @@ def run_bot():
 def health():
     return "봇이 24시간 정상적으로 깨어 있습니다!", 200
 
+# 클라우드가 무조건 실행하도록 if문 밖으로 꺼냅니다!
+bot_thread = threading.Thread(target=run_bot, daemon=True)
+bot_thread.start()
+
 if __name__ == '__main__':
-    # 봇 로직을 백그라운드 스레드로 분리하여 무한 실행
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-    
-    # 렌더 클라우드용 웹 서버 가동
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
